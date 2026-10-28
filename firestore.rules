@@ -41,8 +41,9 @@ service cloud.firestore {
         && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 150))
         && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000))
         && (!('currency' in data) || (data.currency is string && data.currency.size() <= 10))
-        && (!('lastSyncedAt' in data) || (data.lastSyncedAt is string && data.lastSyncedAt.size() <= 50))
-        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50))
+        && (!('lastSyncedAt' in data) || (data.lastSyncedAt is string && data.lastSyncedAt.size() <= 100))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100))
         && (!('seedV2Applied' in data) || data.seedV2Applied is bool);
     }
 
@@ -56,7 +57,9 @@ service cloud.firestore {
         && (!('institution' in data) || (data.institution is string && data.institution.size() <= 100))
         && (!('color' in data) || (data.color is string && data.color.size() <= 50))
         && (!('icon' in data) || (data.icon is string && data.icon.size() <= 50))
-        && (!('isArchived' in data) || data.isArchived is bool);
+        && (!('isArchived' in data) || data.isArchived is bool)
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
     }
 
     function isValidCategoryGroup(data) {
@@ -66,7 +69,9 @@ service cloud.firestore {
         && (!('targetAllocationPercent' in data) || data.targetAllocationPercent is number || data.targetAllocationPercent is int)
         && (!('kind' in data) || data.kind in ['expense', 'income'])
         && (!('description' in data) || (data.description is string && data.description.size() <= 255))
-        && (!('categories' in data) || data.categories is list);
+        && (!('categories' in data) || data.categories is list)
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
     }
 
     function isValidGroupOccasion(data) {
@@ -79,7 +84,8 @@ service cloud.firestore {
         && (!('isPinnedAlwaysActive' in data) || data.isPinnedAlwaysActive is bool)
         && (!('isArchived' in data) || data.isArchived is bool)
         && (!('order' in data) || data.order is number || data.order is int)
-        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
     }
 
     function isValidPerson(data) {
@@ -87,7 +93,8 @@ service cloud.firestore {
         && data.id is string && isValidId(data.id)
         && data.name is string && data.name.size() > 0 && data.name.size() <= 100
         && data.emoji is string && data.emoji.size() <= 10
-        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
     }
 
     function isValidTransaction(data) {
@@ -96,7 +103,7 @@ service cloud.firestore {
         && data.type in ['expense', 'income', 'transfer']
         && (data.amount is number || data.amount is int)
         && data.accountId is string && isValidId(data.accountId)
-        && data.date is string && data.date.size() <= 30
+        && data.date is string && data.date.size() <= 100
         && (!('toAccountId' in data) || (data.toAccountId is string && isValidId(data.toAccountId)))
         && (!('categoryId' in data) || (data.categoryId is string && isValidId(data.categoryId)))
         && (!('subcategoryId' in data) || (data.subcategoryId is string && isValidId(data.subcategoryId)))
@@ -105,17 +112,18 @@ service cloud.firestore {
         && (!('owedByPersonId' in data) || (data.owedByPersonId is string && isValidId(data.owedByPersonId)))
         && (!('owedAmount' in data) || data.owedAmount is number || data.owedAmount is int)
         && (!('isSettled' in data) || data.isSettled is bool)
-        && (!('settledAt' in data) || (data.settledAt is string && data.settledAt.size() <= 50))
+        && (!('settledAt' in data) || (data.settledAt is string && data.settledAt.size() <= 100))
         && (!('settledRepaymentId' in data) || (data.settledRepaymentId is string && isValidId(data.settledRepaymentId)))
         && (!('varianceTag' in data) || (data.varianceTag is string && data.varianceTag.size() <= 50))
         && (!('tags' in data) || data.tags is list)
         && (!('note' in data) || (data.note is string && data.note.size() <= 255))
-        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 50));
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 100))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 100));
     }
 
     // User Private Store
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      allow read: if isOwner(userId);
       allow create, update: if isOwner(userId) && isValidUser(incoming());
       allow delete: if isOwner(userId);
 

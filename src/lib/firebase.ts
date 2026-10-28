@@ -1,7 +1,16 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  onIdTokenChanged,
+  User,
+} from 'firebase/auth';
 import {
   initializeFirestore,
+  getFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
   doc,
@@ -12,17 +21,42 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: The app requires firestoreDatabaseId and multi-tab persistent cache
-export const db = initializeFirestore(
-  app,
-  {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  },
-  firebaseConfig.firestoreDatabaseId
-);
+// CRITICAL: Robust Firestore instance initialization with fallback and multi-tab cache
+const databaseId = (firebaseConfig as { firestoreDatabaseId?: string }).firestoreDatabaseId || '(default)';
+
+let firestoreDb: ReturnType<typeof initializeFirestore>;
+try {
+  firestoreDb = initializeFirestore(
+    app,
+    {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    },
+    databaseId
+  );
+} catch {
+  // If already initialized in module lifecycle
+  firestoreDb = getFirestore(app, databaseId);
+}
+
+export const db = firestoreDb;
 export { waitForPendingWrites };
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export { onAuthStateChanged, onIdTokenChanged, signInWithPopup, signOut };
+export type { User };
+
+// Proactive Token Refresh Helper
+export async function refreshAuthToken(force = false): Promise<string | null> {
+  if (!auth.currentUser) return null;
+  try {
+    return await auth.currentUser.getIdToken(force);
+  } catch (err) {
+    console.warn('Proactive auth token refresh failed:', err);
+    return null;
+  }
+}
 
 // Error Handling conforming strictly to FirestoreErrorInfo format
 export enum OperationType {
@@ -77,15 +111,15 @@ export function handleFirestoreError(
   return errInfo;
 }
 
-// Test connection on boot
-export async function testConnection() {
+// Diagnostic connection test - safe to call manually without crashing boot
+export async function testConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
+    return true;
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('Firebase client is offline. Local offline persistence active.');
     }
+    return false;
   }
 }
-
-testConnection();

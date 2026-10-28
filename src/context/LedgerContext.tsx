@@ -1,8 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { Account, CategoryGroup, CategoryItem, Subcategory, Transaction, TransactionType, Person, RepaymentPayload, GroupOccasion } from '../types';
 import { INITIAL_ACCOUNTS, INITIAL_CATEGORY_GROUPS, INITIAL_TRANSACTIONS, INITIAL_PEOPLE, INITIAL_GROUPS } from '../data/initialData';
-import { auth, db, googleProvider, handleFirestoreError, OperationType, waitForPendingWrites } from '../lib/firebase';
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import {
+  auth,
+  db,
+  googleProvider,
+  handleFirestoreError,
+  OperationType,
+  waitForPendingWrites,
+  onIdTokenChanged,
+  refreshAuthToken,
+  User,
+} from '../lib/firebase';
+import { signInWithPopup, signOut } from 'firebase/auth';
 import {
   collection,
   doc,
@@ -90,8 +100,10 @@ interface LedgerContextType {
   lastSyncedAt: Date | null;
   syncError: string | null;
   dismissSyncError: () => void;
+  isSessionExpired: boolean;
+  reauthenticate: () => Promise<void>;
   pendingConflict: { cloudCount: number; localCount: number } | null;
-  resolveConflict: (resolution: 'cloud' | 'local') => Promise<void>;
+  resolveConflict: (resolution: 'merge' | 'cloud' | 'local') => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
   syncNow: () => Promise<void>;
@@ -166,6 +178,7 @@ function sanitizeTx(tx: Transaction): Record<string, unknown> {
     date: tx.date,
   };
   if (tx.createdAt) clean.createdAt = tx.createdAt;
+  if (tx.updatedAt) clean.updatedAt = tx.updatedAt;
   if (tx.toAccountId && tx.toAccountId.trim()) clean.toAccountId = tx.toAccountId.trim();
   if (tx.categoryId && tx.categoryId.trim()) clean.categoryId = tx.categoryId.trim();
   if (tx.subcategoryId && tx.subcategoryId.trim()) clean.subcategoryId = tx.subcategoryId.trim();
@@ -194,6 +207,7 @@ function sanitizeAccount(acc: Account): Record<string, unknown> {
   if (acc.icon) clean.icon = acc.icon;
   if (acc.institution) clean.institution = acc.institution.slice(0, 100);
   if (typeof acc.isArchived === 'boolean') clean.isArchived = acc.isArchived;
+  if (acc.updatedAt) clean.updatedAt = acc.updatedAt;
   return clean;
 }
 
@@ -207,6 +221,7 @@ function sanitizeCategoryGroup(grp: CategoryGroup): Record<string, unknown> {
   }
   if (grp.kind) clean.kind = grp.kind;
   if (grp.description) clean.description = grp.description.slice(0, 255);
+  if (grp.updatedAt) clean.updatedAt = grp.updatedAt;
   if (Array.isArray(grp.categories)) {
     clean.categories = grp.categories.map(c => {
       const catObj: Record<string, unknown> = {
@@ -218,6 +233,7 @@ function sanitizeCategoryGroup(grp: CategoryGroup): Record<string, unknown> {
         kind: c.kind,
       };
       if (c.isDefaultSortLater) catObj.isDefaultSortLater = true;
+      if (c.updatedAt) catObj.updatedAt = c.updatedAt;
       if (Array.isArray(c.subcategories)) {
         catObj.subcategories = c.subcategories.map(s => {
           const subObj: Record<string, unknown> = {
@@ -246,6 +262,7 @@ function sanitizeGroup(grp: GroupOccasion): Record<string, unknown> {
   if (typeof grp.isArchived === 'boolean') clean.isArchived = grp.isArchived;
   if (typeof grp.order === 'number') clean.order = grp.order;
   if (grp.createdAt) clean.createdAt = grp.createdAt;
+  if (grp.updatedAt) clean.updatedAt = grp.updatedAt;
   return clean;
 }
 
@@ -256,6 +273,7 @@ function sanitizePerson(person: Person): Record<string, unknown> {
     emoji: (person.emoji || '👤').slice(0, 10),
   };
   if (person.createdAt) clean.createdAt = person.createdAt;
+  if (person.updatedAt) clean.updatedAt = person.updatedAt;
   return clean;
 }
 
@@ -305,6 +323,7 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [syncStage, setSyncStage] = useState<string>('Connecting...');
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSessionExpired, setIsSessionExpired] = useState<boolean>(false);
 
   const dismissSyncError = () => setSyncError(null);
 
@@ -399,15 +418,47 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     saveScopedData(STORAGE_KEYS.TRANSACTIONS, currentUser ? currentUser.uid : null, transactions);
   }, [transactions, currentUser]);
 
-  // Listen to Auth State
+  // Proactive token refresh helper
+  const handleTokenRefresh = async (force = false): Promise<boolean> => {
+    if (!auth.currentUser) return false;
+    try {
+      const token = await refreshAuthToken(force);
+      if (token) {
+        setIsSessionExpired(false);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Token refresh error:', err);
+    }
+    return false;
+  };
+
+  // Re-authenticate when token expires or session needs interactive renewal
+  const reauthenticate = async () => {
+    try {
+      setCloudSyncStatus('syncing');
+      setSyncStage('Re-authenticating...');
+      await signInWithPopup(auth, googleProvider);
+      setIsSessionExpired(false);
+      setSyncError(null);
+      await syncNow();
+    } catch (err) {
+      console.error('Re-authentication failed:', err);
+      setSyncError('Re-authentication failed or was cancelled.');
+    }
+  };
+
+  // Listen to Auth State via onIdTokenChanged to catch background refreshes & token events
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, user => {
+    const unsubscribe = onIdTokenChanged(auth, async user => {
       setCurrentUser(user);
       setIsAuthReady(true);
       if (user) {
+        setIsSessionExpired(false);
         setCloudSyncStatus('syncing');
         setSyncStage('Connecting...');
       } else {
+        setIsSessionExpired(false);
         setCloudSyncStatus('guest');
         setSyncProgress(100);
         setSyncStage('Guest Mode');
@@ -416,29 +467,30 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => unsubscribe();
   }, []);
 
-  // Proactive token refresh every 40 minutes (Google Auth token expires after 60 minutes)
+  // Proactive token refresh: every 30 minutes, on window focus, and on network reconnection
   useEffect(() => {
     if (!currentUser) return;
     const interval = setInterval(async () => {
-      try {
-        await currentUser.getIdToken(true);
-      } catch (err) {
-        console.warn('Silent token refresh failed:', err);
+      const ok = await handleTokenRefresh(true);
+      if (!ok && currentUser) {
+        console.warn('Silent token renewal returned null. Prompting re-auth if needed.');
       }
-    }, 40 * 60 * 1000);
+    }, 30 * 60 * 1000);
 
-    const handleFocus = async () => {
+    const handleWake = async () => {
       try {
-        await currentUser.getIdToken(true);
+        await handleTokenRefresh(true);
       } catch (err) {
-        console.warn('Token refresh on window focus failed:', err);
+        console.warn('Token refresh on window focus / online failed:', err);
       }
     };
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener('focus', handleWake);
+    window.addEventListener('online', handleWake);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('focus', handleWake);
+      window.removeEventListener('online', handleWake);
     };
   }, [currentUser]);
 
@@ -583,6 +635,26 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     initCloudAccount();
 
+    const handleSnapshotError = async (err: unknown, colName: string) => {
+      console.warn(`${colName} snapshot error:`, err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (
+        errMsg.includes('permission') ||
+        errMsg.includes('token') ||
+        errMsg.includes('auth') ||
+        errMsg.includes('unauthenticated') ||
+        (err as { code?: string })?.code === 'permission-denied'
+      ) {
+        const refreshed = await handleTokenRefresh(true);
+        if (!refreshed) {
+          setIsSessionExpired(true);
+          setSyncError('Google session expired. Tap Re-authenticate to resume cloud sync.');
+          setCloudSyncStatus('offline');
+          setSyncStage('Auth Expired');
+        }
+      }
+    };
+
     // Accounts subscription with metadata tracking & empty cache guard
     const unsubAccounts = onSnapshot(
       collection(db, 'users', uid, 'accounts'),
@@ -603,7 +675,7 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         evaluateSyncProgress();
       },
       error => {
-        console.warn('Accounts snapshot error:', error);
+        handleSnapshotError(error, 'accounts');
         collectionStatus.accounts.isError = true;
         evaluateSyncProgress();
       }
@@ -631,7 +703,7 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         evaluateSyncProgress();
       },
       error => {
-        console.warn('Category snapshot error:', error);
+        handleSnapshotError(error, 'categories');
         collectionStatus.categories.isError = true;
         evaluateSyncProgress();
       }
@@ -658,7 +730,7 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         evaluateSyncProgress();
       },
       error => {
-        console.warn('Groups snapshot error:', error);
+        handleSnapshotError(error, 'groups');
         collectionStatus.groups.isError = true;
         evaluateSyncProgress();
       }
@@ -684,7 +756,7 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         evaluateSyncProgress();
       },
       error => {
-        console.warn('People snapshot error:', error);
+        handleSnapshotError(error, 'people');
         collectionStatus.people.isError = true;
         evaluateSyncProgress();
       }
@@ -714,7 +786,7 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         evaluateSyncProgress();
       },
       error => {
-        console.warn('Transactions snapshot error:', error);
+        handleSnapshotError(error, 'transactions');
         collectionStatus.transactions.isError = true;
         evaluateSyncProgress();
       }
@@ -766,8 +838,8 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  // Conflict Resolution Action with chunked batch writes
-  const resolveConflict = async (resolution: 'cloud' | 'local') => {
+  // Multi-Device Conflict Resolution with granular document-level merging
+  const resolveConflict = async (resolution: 'merge' | 'cloud' | 'local') => {
     if (!currentUser) return;
     const uid = currentUser.uid;
     setPendingConflict(null);
@@ -775,13 +847,15 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (resolution === 'cloud') {
       // Pull fresh from cloud
       await syncNow();
-    } else {
+      return;
+    }
+
+    if (resolution === 'local') {
       // Overwrite cloud with local
       setCloudSyncStatus('syncing');
       setSyncStage('Overwriting cloud with local data...');
       setSyncProgress(50);
 
-      // Remove existing remote transactions
       const remoteTxSnap = await getDocs(collection(db, 'users', uid, 'transactions'));
       const operations: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
       remoteTxSnap.forEach(d => operations.push(b => b.delete(d.ref)));
@@ -792,12 +866,181 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       for (const acc of accounts) {
         operations.push(b => b.set(doc(db, 'users', uid, 'accounts', acc.id), sanitizeAccount(acc)));
       }
+      for (const grp of categoryGroups) {
+        operations.push(b => b.set(doc(db, 'users', uid, 'categoryGroups', grp.id), sanitizeCategoryGroup(grp)));
+      }
+      for (const occasion of groups) {
+        operations.push(b => b.set(doc(db, 'users', uid, 'groups', occasion.id), sanitizeGroup(occasion)));
+      }
+      for (const person of people) {
+        operations.push(b => b.set(doc(db, 'users', uid, 'people', person.id), sanitizePerson(person)));
+      }
       await commitBatchesInChunks(operations, 400);
 
       setCloudSyncStatus('synced');
       setSyncProgress(100);
       setSyncStage('100% In Sync');
       setLastSyncedAt(new Date());
+      return;
+    }
+
+    // Granular Smart Merge ('merge') - combines items from both devices by ID
+    setCloudSyncStatus('syncing');
+    setSyncStage('Performing granular multi-device merge...');
+    setSyncProgress(30);
+
+    try {
+      const [remoteTxSnap, remoteAccSnap, remoteCatSnap, remoteGrpSnap, remotePplSnap] = await Promise.all([
+        getDocs(collection(db, 'users', uid, 'transactions')),
+        getDocs(collection(db, 'users', uid, 'accounts')),
+        getDocs(collection(db, 'users', uid, 'categoryGroups')),
+        getDocs(collection(db, 'users', uid, 'groups')),
+        getDocs(collection(db, 'users', uid, 'people')),
+      ]);
+
+      const operations: Array<(batch: ReturnType<typeof writeBatch>) => void> = [];
+
+      // 1. Transactions merge
+      const remoteTxMap = new Map<string, Transaction>();
+      remoteTxSnap.forEach(d => remoteTxMap.set(d.id, d.data() as Transaction));
+
+      const mergedTxMap = new Map<string, Transaction>(remoteTxMap);
+      for (const localTx of transactions) {
+        const remote = remoteTxMap.get(localTx.id);
+        if (!remote) {
+          // Unique to local: add to cloud and merged map
+          mergedTxMap.set(localTx.id, localTx);
+          operations.push(b => b.set(doc(db, 'users', uid, 'transactions', localTx.id), sanitizeTx(localTx)));
+        } else {
+          // Compare updatedAt timestamps
+          const localTs = localTx.updatedAt || localTx.createdAt || '';
+          const remoteTs = remote.updatedAt || remote.createdAt || '';
+          if (localTs > remoteTs) {
+            mergedTxMap.set(localTx.id, localTx);
+            operations.push(b => b.set(doc(db, 'users', uid, 'transactions', localTx.id), sanitizeTx(localTx)));
+          }
+        }
+      }
+      const finalTxList = Array.from(mergedTxMap.values()).sort((a, b) => {
+        if (b.date !== a.date) return b.date.localeCompare(a.date);
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      });
+
+      // 2. Accounts merge
+      const remoteAccMap = new Map<string, Account>();
+      remoteAccSnap.forEach(d => remoteAccMap.set(d.id, d.data() as Account));
+
+      const mergedAccMap = new Map<string, Account>(remoteAccMap);
+      for (const localAcc of accounts) {
+        const remote = remoteAccMap.get(localAcc.id);
+        if (!remote) {
+          mergedAccMap.set(localAcc.id, localAcc);
+          operations.push(b => b.set(doc(db, 'users', uid, 'accounts', localAcc.id), sanitizeAccount(localAcc)));
+        } else {
+          const localTs = localAcc.updatedAt || '';
+          const remoteTs = remote.updatedAt || '';
+          if (localTs > remoteTs) {
+            mergedAccMap.set(localAcc.id, localAcc);
+            operations.push(b => b.set(doc(db, 'users', uid, 'accounts', localAcc.id), sanitizeAccount(localAcc)));
+          }
+        }
+      }
+      const finalAccList = Array.from(mergedAccMap.values());
+
+      // 3. Category Groups merge
+      const remoteCatMap = new Map<string, CategoryGroup>();
+      remoteCatSnap.forEach(d => remoteCatMap.set(d.id, d.data() as CategoryGroup));
+
+      const mergedCatMap = new Map<string, CategoryGroup>(remoteCatMap);
+      for (const localCat of categoryGroups) {
+        const remote = remoteCatMap.get(localCat.id);
+        if (!remote) {
+          mergedCatMap.set(localCat.id, localCat);
+          operations.push(b => b.set(doc(db, 'users', uid, 'categoryGroups', localCat.id), sanitizeCategoryGroup(localCat)));
+        } else {
+          const localTs = localCat.updatedAt || '';
+          const remoteTs = remote.updatedAt || '';
+          if (localTs > remoteTs) {
+            mergedCatMap.set(localCat.id, localCat);
+            operations.push(b => b.set(doc(db, 'users', uid, 'categoryGroups', localCat.id), sanitizeCategoryGroup(localCat)));
+          }
+        }
+      }
+      const finalCatList = Array.from(mergedCatMap.values());
+
+      // 4. Groups & Occasions merge
+      const remoteGrpMap = new Map<string, GroupOccasion>();
+      remoteGrpSnap.forEach(d => remoteGrpMap.set(d.id, d.data() as GroupOccasion));
+
+      const mergedGrpMap = new Map<string, GroupOccasion>(remoteGrpMap);
+      for (const localGrp of groups) {
+        const remote = remoteGrpMap.get(localGrp.id);
+        if (!remote) {
+          mergedGrpMap.set(localGrp.id, localGrp);
+          operations.push(b => b.set(doc(db, 'users', uid, 'groups', localGrp.id), sanitizeGroup(localGrp)));
+        } else {
+          const localTs = localGrp.updatedAt || localGrp.createdAt || '';
+          const remoteTs = remote.updatedAt || remote.createdAt || '';
+          if (localTs > remoteTs) {
+            mergedGrpMap.set(localGrp.id, localGrp);
+            operations.push(b => b.set(doc(db, 'users', uid, 'groups', localGrp.id), sanitizeGroup(localGrp)));
+          }
+        }
+      }
+      const finalGrpList = Array.from(mergedGrpMap.values()).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      // 5. People merge
+      const remotePplMap = new Map<string, Person>();
+      remotePplSnap.forEach(d => remotePplMap.set(d.id, d.data() as Person));
+
+      const mergedPplMap = new Map<string, Person>(remotePplMap);
+      for (const localPerson of people) {
+        const remote = remotePplMap.get(localPerson.id);
+        if (!remote) {
+          mergedPplMap.set(localPerson.id, localPerson);
+          operations.push(b => b.set(doc(db, 'users', uid, 'people', localPerson.id), sanitizePerson(localPerson)));
+        } else {
+          const localTs = localPerson.updatedAt || localPerson.createdAt || '';
+          const remoteTs = remote.updatedAt || remote.createdAt || '';
+          if (localTs > remoteTs) {
+            mergedPplMap.set(localPerson.id, localPerson);
+            operations.push(b => b.set(doc(db, 'users', uid, 'people', localPerson.id), sanitizePerson(localPerson)));
+          }
+        }
+      }
+      const finalPplList = Array.from(mergedPplMap.values());
+
+      setSyncProgress(70);
+      setSyncStage('Writing merged records to cloud...');
+      if (operations.length > 0) {
+        await commitBatchesInChunks(operations, 400);
+      }
+
+      // Update local state with the merged union
+      setTransactions(finalTxList);
+      saveScopedData(STORAGE_KEYS.TRANSACTIONS, uid, finalTxList);
+
+      setAccounts(finalAccList);
+      saveScopedData(STORAGE_KEYS.ACCOUNTS, uid, finalAccList);
+
+      setCategoryGroups(finalCatList);
+      saveScopedData(STORAGE_KEYS.GROUPS, uid, finalCatList);
+
+      setGroups(finalGrpList);
+      saveScopedData(STORAGE_KEYS.OCCASIONS, uid, finalGrpList);
+
+      setPeople(finalPplList);
+      saveScopedData(STORAGE_KEYS.PEOPLE, uid, finalPplList);
+
+      setCloudSyncStatus('synced');
+      setSyncProgress(100);
+      setSyncStage('100% In Sync');
+      setLastSyncedAt(new Date());
+    } catch (err) {
+      console.error('Granular merge conflict resolution failed:', err);
+      const errInfo = handleFirestoreError(err, OperationType.WRITE, 'resolveConflict.merge');
+      setSyncError(`Merge failed: ${errInfo.error}`);
+      setCloudSyncStatus('offline');
     }
   };
 
@@ -2003,6 +2246,8 @@ export const LedgerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         lastSyncedAt,
         syncError,
         dismissSyncError,
+        isSessionExpired,
+        reauthenticate,
         pendingConflict,
         resolveConflict,
         signInWithGoogle,

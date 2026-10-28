@@ -144,7 +144,7 @@ function QuickLogMainView({
 }
 
 export function AppContent() {
-  const { currentUser, clearSessionGroup, syncError, dismissSyncError } = useLedger();
+  const { currentUser, clearSessionGroup, syncError, dismissSyncError, isSessionExpired, reauthenticate } = useLedger();
   const [activeTab, setActiveTab] = useState<'log' | 'movements' | 'accounts' | 'stats'>('log');
 
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -194,7 +194,31 @@ export function AppContent() {
 
       {/* Main Viewport Content (Safe Area offset on mobile to clear fixed top header and fixed bottom bar) */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 mobile-safe-layout">
-        {syncError && (
+        {/* Session Expiration Interactive Alert */}
+        {isSessionExpired && (
+          <div className="mb-4 p-3.5 sm:p-4 bg-amber-50 dark:bg-amber-950/60 border-2 border-amber-500/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-950 dark:text-amber-100 shadow-sm animate-in slide-in-from-top-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <AlertTriangle className="w-4 h-4 stroke-[2.2]" />
+              </div>
+              <div>
+                <span className="font-bold text-sm block">Google Cloud Session Expired</span>
+                <span className="text-[11px] text-zinc-600 dark:text-zinc-300 block">
+                  Your 1-hour security token expired. Re-authenticate to resume real-time sync without losing offline entries.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={reauthenticate}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold rounded-xl text-xs transition-all shrink-0 cursor-pointer shadow-xs"
+            >
+              Re-authenticate Now
+            </button>
+          </div>
+        )}
+
+        {syncError && !isSessionExpired && (
           <div className="mb-4 p-3 sm:p-3.5 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 rounded-2xl flex items-center justify-between gap-3 text-xs text-red-900 dark:text-red-200 shadow-sm animate-in fade-in">
             <div className="flex items-center gap-2.5 min-w-0">
               <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />

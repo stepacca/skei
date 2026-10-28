@@ -14,6 +14,7 @@ export interface Account {
   icon: string;
   institution?: string;
   isArchived?: boolean;
+  updatedAt?: string;
 }
 
 export interface Person {
@@ -21,6 +22,7 @@ export interface Person {
   name: string;
   emoji: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Subcategory {
@@ -38,6 +40,7 @@ export interface CategoryItem {
   kind: CategoryKind; // 'expense' or 'income'
   isDefaultSortLater?: boolean;
   subcategories?: Subcategory[];
+  updatedAt?: string;
 }
 
 export interface CategoryGroup {
@@ -47,6 +50,7 @@ export interface CategoryGroup {
   kind?: CategoryKind;
   description?: string;
   categories: CategoryItem[];
+  updatedAt?: string;
 }
 
 export interface GroupOccasion {
@@ -59,6 +63,7 @@ export interface GroupOccasion {
   isArchived?: boolean;
   order: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Transaction {
@@ -75,6 +80,7 @@ export interface Transaction {
   note: string;
   tags?: string[];
   createdAt: string; // ISO
+  updatedAt?: string; // ISO for conflict resolution
   // People & Debt recovery ("Someone owes me")
   owedByPersonId?: string;
   owedAmount?: number;

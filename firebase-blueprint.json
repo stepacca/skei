@@ -12,6 +12,7 @@
         "currency": { "type": "string", "description": "Default currency code" },
         "lastSyncedAt": { "type": "string", "description": "ISO timestamp of last cloud sync" },
         "createdAt": { "type": "string", "description": "Account creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" },
         "seedV2Applied": { "type": "boolean", "description": "Database seeding state" }
       },
       "required": ["uid"]
@@ -29,7 +30,9 @@
         "color": { "type": "string", "description": "Account color code" },
         "icon": { "type": "string", "description": "Icon identifier" },
         "institution": { "type": "string", "maxLength": 100, "description": "Bank or institution name" },
-        "isArchived": { "type": "boolean", "description": "Archive state" }
+        "isArchived": { "type": "boolean", "description": "Archive state" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
       },
       "required": ["id", "name", "type", "initialBalance"]
     },
@@ -43,7 +46,9 @@
         "targetAllocationPercent": { "type": "number", "description": "Target percentage allocation" },
         "kind": { "type": "string", "enum": ["expense", "income"] },
         "description": { "type": "string", "maxLength": 255 },
-        "categories": { "type": "array", "description": "Array of category items" }
+        "categories": { "type": "array", "description": "Array of category items" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
       },
       "required": ["id", "name"]
     },
@@ -60,7 +65,8 @@
         "isPinnedAlwaysActive": { "type": "boolean", "description": "Always active across sessions" },
         "isArchived": { "type": "boolean", "description": "Archive status" },
         "order": { "type": "number", "description": "Sort order index" },
-        "createdAt": { "type": "string", "description": "Creation timestamp" }
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
       },
       "required": ["id", "name", "emoji"]
     },
@@ -72,7 +78,8 @@
         "id": { "type": "string", "description": "Person identifier" },
         "name": { "type": "string", "maxLength": 100, "description": "Person name" },
         "emoji": { "type": "string", "maxLength": 10, "description": "Display emoji" },
-        "createdAt": { "type": "string", "description": "Creation timestamp" }
+        "createdAt": { "type": "string", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
       },
       "required": ["id", "name", "emoji"]
     },
@@ -94,7 +101,8 @@
         "isSettled": { "type": "boolean", "description": "Settled status for owed debt" },
         "note": { "type": "string", "maxLength": 255, "description": "Optional merchant or note" },
         "date": { "type": "string", "description": "Transaction date YYYY-MM-DD" },
-        "createdAt": { "type": "string", "description": "ISO timestamp" }
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Last updated timestamp" }
       },
       "required": ["id", "type", "amount", "accountId", "date"]
     }
