@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (function() {
+        try {
+          var currentFetch = window.fetch ? window.fetch.bind(window) : undefined;
+          var fetchProp = {
+            configurable: true,
+            enumerable: true,
+            get: function() {
+              return currentFetch;
+            },
+            set: function(fn) {
+              currentFetch = fn;
+            }
+          };
+
+          try {
+            Object.defineProperty(window, 'fetch', fetchProp);
+          } catch (_) {}
+
+          try {
+            if (window.Window && Window.prototype) {
+              Object.defineProperty(Window.prototype, 'fetch', fetchProp);
+            }
+          } catch (_) {}
+        } catch (e) {}
+
+        try {
+          window.addEventListener('error', function(event) {
+            var isExt = (event && event.filename && event.filename.indexOf('chrome-extension://') !== -1);
+            var isFetchErr = (event && event.message && event.message.indexOf('fetch') !== -1 && event.message.indexOf('getter') !== -1);
+            if (isExt || isFetchErr) {
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              if (event.preventDefault) event.preventDefault();
+              return true;
+            }
+          }, true);
+
+          window.addEventListener('unhandledrejection', function(event) {
+            var reason = event && event.reason;
+            var stack = (reason && reason.stack) || '';
+            var msg = (reason && reason.message) || '';
+            if (stack.indexOf('chrome-extension://') !== -1 || (msg.indexOf('fetch') !== -1 && msg.indexOf('getter') !== -1)) {
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              if (event.preventDefault) event.preventDefault();
+            }
+          }, true);
+        } catch (e) {}
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Skei — Precision Expense Tracking & Category Planning</title>
+    <meta name="description" content="Minimalist expense tracking and category planning app with speed numpad logging, multi-account transfers, and spend velocity statistics." />
+    
+    <!-- OpenGraph Social Metadata -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Skei" />
+    <meta property="og:title" content="Skei — Precision Expense Tracking & Category Planning" />
+    <meta property="og:description" content="Minimalist expense tracking and category planning app with speed numpad logging, multi-account transfers, and spend velocity statistics." />
+    <meta property="og:image" content="/pwa-512x512.png" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Skei — Precision Expense Tracking & Category Planning" />
+    <meta name="twitter:description" content="Minimalist expense tracking and category planning app with speed numpad logging, multi-account transfers, and spend velocity statistics." />
+    <meta name="twitter:image" content="/pwa-512x512.png" />
+
+    <!-- Mobile App & PWA Capabilities -->
+    <meta name="application-name" content="Skei" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fafafa" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#09090b" />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Skei" />
+
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+
+    <!-- Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Skei",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "All",
+      "description": "Minimalist expense tracking and category planning app with speed numpad logging, multi-account transfers, and spend velocity statistics.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      }
+    }
+    </script>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('skei_theme_v1');
+          var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = saved === 'dark' || (!saved && systemDark) || (saved === 'system' && systemDark);
+          var root = document.documentElement;
+          if (isDark) {
+            root.classList.add('dark');
+            root.style.backgroundColor = '#09090b';
+            root.style.colorScheme = 'dark';
+          } else {
+            root.classList.remove('dark');
+            root.style.backgroundColor = '#fafafa';
+            root.style.colorScheme = 'light';
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="bg-[#FAFAFA] dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 antialiased selection:bg-zinc-900 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

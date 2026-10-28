@@ -1,0 +1,8 @@
+{
+  "name": "Skei",
+  "description": "Minimalist expense tracking and category planning app with speed numpad logging, multi-account transfers, and spend velocity statistics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and sync settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth user ID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User display name" },
+        "photoURL": { "type": "string", "description": "User avatar URL" },
+        "currency": { "type": "string", "description": "Default currency code" },
+        "lastSyncedAt": { "type": "string", "description": "ISO timestamp of last cloud sync" },
+        "createdAt": { "type": "string", "description": "Account creation timestamp" },
+        "seedV2Applied": { "type": "boolean", "description": "Database seeding state" }
+      },
+      "required": ["uid"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Bank account, card, or cash wallet",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Account identifier" },
+        "name": { "type": "string", "maxLength": 100, "description": "Account name" },
+        "type": { "type": "string", "enum": ["checking", "savings", "credit", "cash", "investment"] },
+        "initialBalance": { "type": "number", "description": "Starting balance in EUR" },
+        "currency": { "type": "string", "description": "Currency code" },
+        "color": { "type": "string", "description": "Account color code" },
+        "icon": { "type": "string", "description": "Icon identifier" },
+        "institution": { "type": "string", "maxLength": 100, "description": "Bank or institution name" },
+        "isArchived": { "type": "boolean", "description": "Archive state" }
+      },
+      "required": ["id", "name", "type", "initialBalance"]
+    },
+    "CategoryGroup": {
+      "title": "CategoryGroup",
+      "description": "Category group containing category items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Group identifier" },
+        "name": { "type": "string", "maxLength": 100, "description": "Group name" },
+        "targetAllocationPercent": { "type": "number", "description": "Target percentage allocation" },
+        "kind": { "type": "string", "enum": ["expense", "income"] },
+        "description": { "type": "string", "maxLength": 255 },
+        "categories": { "type": "array", "description": "Array of category items" }
+      },
+      "required": ["id", "name"]
+    },
+    "GroupOccasion": {
+      "title": "GroupOccasion",
+      "description": "Special group, trip, semester abroad, or event",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Group identifier" },
+        "name": { "type": "string", "maxLength": 100, "description": "Group name" },
+        "emoji": { "type": "string", "maxLength": 10, "description": "Display emoji" },
+        "description": { "type": "string", "maxLength": 255 },
+        "budget": { "type": "number", "description": "Optional budget limit" },
+        "isPinnedAlwaysActive": { "type": "boolean", "description": "Always active across sessions" },
+        "isArchived": { "type": "boolean", "description": "Archive status" },
+        "order": { "type": "number", "description": "Sort order index" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "name", "emoji"]
+    },
+    "Person": {
+      "title": "Person",
+      "description": "Person for shared expenses and recoverable debts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Person identifier" },
+        "name": { "type": "string", "maxLength": 100, "description": "Person name" },
+        "emoji": { "type": "string", "maxLength": 10, "description": "Display emoji" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "name", "emoji"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Expense, income, or account transfer record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Transaction identifier" },
+        "type": { "type": "string", "enum": ["expense", "income", "transfer"] },
+        "amount": { "type": "number", "description": "Transaction amount in EUR" },
+        "accountId": { "type": "string", "description": "Account ID" },
+        "toAccountId": { "type": "string", "description": "Destination account ID for transfers" },
+        "categoryId": { "type": "string", "description": "Category ID" },
+        "groupId": { "type": "string", "description": "Category group ID" },
+        "occasionGroupId": { "type": "string", "description": "Trip or occasion group ID" },
+        "owedByPersonId": { "type": "string", "description": "Debtor person ID" },
+        "owedAmount": { "type": "number", "description": "Amount owed by person" },
+        "isSettled": { "type": "boolean", "description": "Settled status for owed debt" },
+        "note": { "type": "string", "maxLength": 255, "description": "Optional merchant or note" },
+        "date": { "type": "string", "description": "Transaction date YYYY-MM-DD" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["id", "type", "amount", "accountId", "date"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile document and settings"
+    },
+    "/users/{userId}/accounts/{accountId}": {
+      "schema": "Account",
+      "description": "User bank accounts and wallets"
+    },
+    "/users/{userId}/categoryGroups/{groupId}": {
+      "schema": "CategoryGroup",
+      "description": "User category structures"
+    },
+    "/users/{userId}/groups/{groupId}": {
+      "schema": "GroupOccasion",
+      "description": "User trip and occasion groups"
+    },
+    "/users/{userId}/people/{personId}": {
+      "schema": "Person",
+      "description": "User shared expense contacts"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "User financial movements"
+    }
+  }
+}
